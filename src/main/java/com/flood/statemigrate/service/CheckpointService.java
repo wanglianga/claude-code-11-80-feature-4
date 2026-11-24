@@ -24,14 +24,17 @@ public class CheckpointService {
     private final MigrationPlanRepo planRepo;
     private final DualTrackRunRepo runRepo;
     private final StreamService streamService;
+    private final LineageService lineageService;
 
     public CheckpointService(CheckpointManifestRepo checkpointRepo, StreamEventRepo eventRepo,
-                             MigrationPlanRepo planRepo, DualTrackRunRepo runRepo, StreamService streamService) {
+                             MigrationPlanRepo planRepo, DualTrackRunRepo runRepo, StreamService streamService,
+                             LineageService lineageService) {
         this.checkpointRepo = checkpointRepo;
         this.eventRepo = eventRepo;
         this.planRepo = planRepo;
         this.runRepo = runRepo;
         this.streamService = streamService;
+        this.lineageService = lineageService;
     }
 
     @Transactional
@@ -40,7 +43,9 @@ public class CheckpointService {
         streamService.partition(stream, cp.getPartitionNo());
         cp.setStreamId(streamId);
         cp.setReadOnlySnapshot(false);
-        return checkpointRepo.save(cp);
+        CheckpointManifest saved = checkpointRepo.save(cp);
+        lineageService.ensureLineage(stream, saved);
+        return saved;
     }
 
     public List<CheckpointManifest> list(Long streamId) {

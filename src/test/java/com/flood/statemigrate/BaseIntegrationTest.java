@@ -21,11 +21,25 @@ abstract class BaseIntegrationTest {
     @Autowired protected SwitchGateRepo gateRepo;
     @Autowired protected RollbackRecordRepo rollbackRepo;
     @Autowired protected EvidenceEntryRepo evidenceRepo;
+    @Autowired protected RetentionPolicyRepo retentionPolicyRepo;
+    @Autowired protected SnapshotLineageRepo lineageRepo;
+    @Autowired protected PartitionScaleEventRepo scaleEventRepo;
+    @Autowired protected BypassRuleRepo bypassRuleRepo;
+    @Autowired protected RecoveryDrillRepo drillRepo;
+    @Autowired protected CompressionPackageRepo compressionPackageRepo;
+    @Autowired protected IncidentRestoreRepo incidentRestoreRepo;
 
     protected ScenarioBuilder scenario;
 
     @BeforeEach
     void cleanDb() {
+        incidentRestoreRepo.deleteAll();
+        compressionPackageRepo.deleteAll();
+        drillRepo.deleteAll();
+        lineageRepo.deleteAll();
+        scaleEventRepo.deleteAll();
+        bypassRuleRepo.deleteAll();
+        retentionPolicyRepo.deleteAll();
         diffRepo.deleteAll();
         runRepo.deleteAll();
         evidenceRepo.deleteAll();

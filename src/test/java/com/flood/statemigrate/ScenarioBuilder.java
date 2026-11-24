@@ -142,6 +142,44 @@ class ScenarioBuilder {
         return checkpointRepo.save(cp);
     }
 
+    /** 指定规则包版本/状态模式/时间窗的检查点（谱系由 Service 补建） */
+    CheckpointManifest checkpointDetailed(Long streamId, int p, long offset, String ruleVersion,
+                                          StateSchema schema, Instant windowStart, Instant windowEnd,
+                                          String riskLevel) {
+        CheckpointManifest cp = new CheckpointManifest();
+        cp.setStreamId(streamId);
+        cp.setPartitionNo(p);
+        cp.setConsumeOffset(offset);
+        cp.setWindowWatermark(windowEnd);
+        cp.setStateSnapshotJson(snapshot(schema, windowStart, windowEnd, 30.0, 30, 0.9, riskLevel));
+        cp.setOutputBatchId("batch-" + p + "-" + offset);
+        cp.setRulePackageVersion(ruleVersion);
+        cp.setStateSchema(schema);
+        cp.setStatus(CheckpointStatus.COMPLETE);
+        return checkpointRepo.save(cp);
+    }
+
+    /** 生成指定模式/窗口/状态量的快照 JSON（旧模式顶层字段，新模式三层嵌套） */
+    String snapshot(StateSchema schema, Instant windowStart, Instant windowEnd,
+                    double rain2h, double pumpRuntimeMin, double credibility, String riskLevel) {
+        if (schema == StateSchema.GRID_WINDOW_V1) {
+            return "{\"gridId\":\"G\",\"windowStart\":\"" + windowStart + "\",\"windowEnd\":\"" + windowEnd + "\","
+                    + "\"rain2hAcc\":" + rain2h + ",\"upstreamInflowAcc\":800.0,\"deviceHealth\":" + credibility + ","
+                    + "\"pumpRuntimeMin\":" + pumpRuntimeMin + ",\"riskLevel\":\"" + riskLevel + "\"}";
+        }
+        return "{\"windowStart\":\"" + windowStart + "\",\"windowEnd\":\"" + windowEnd + "\","
+                + "\"pump\":{\"pumpId\":\"P\",\"runtimeMin\":" + pumpRuntimeMin + "},"
+                + "\"reach\":{\"reachId\":\"RCH\",\"inflowAcc\":800.0},"
+                + "\"road\":{\"roadId\":\"R\",\"rain2hAcc\":" + rain2h + ",\"credibility\":" + credibility + "},"
+                + "\"riskLevel\":\"" + riskLevel + "\"}";
+    }
+
+    /** 复制快照并把风险等级/降雨累计替换为错误值（制造演练摘要不一致） */
+    String corruptSnapshot(String snapshotJson) {
+        return snapshotJson.replace("\"rain2hAcc\":30.0", "\"rain2hAcc\":99.0")
+                .replace("\"rain2hAcc\":30", "\"rain2hAcc\":99");
+    }
+
     private void addEvent(Long streamId, int p, Instant time, String type, String payload) {
         StreamEvent e = new StreamEvent();
         e.setStreamId(streamId);

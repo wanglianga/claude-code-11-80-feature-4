@@ -36,13 +36,15 @@ public class PlannerService {
     private final AggregationService aggregationService;
     private final RuleEngine ruleEngine;
     private final RulePackageService rulePackageService;
+    private final LineageService lineageService;
     private final ObjectMapper om;
 
     public PlannerService(MigrationPlanRepo planRepo, CheckpointManifestRepo checkpointRepo,
                           StreamEventRepo eventRepo, EvidenceEntryRepo evidenceRepo, SwitchGateRepo gateRepo,
                           StreamService streamService, ProverService proverService,
                           AggregationService aggregationService, RuleEngine ruleEngine,
-                          RulePackageService rulePackageService, ObjectMapper om) {
+                          RulePackageService rulePackageService, LineageService lineageService,
+                          ObjectMapper om) {
         this.planRepo = planRepo;
         this.checkpointRepo = checkpointRepo;
         this.eventRepo = eventRepo;
@@ -53,6 +55,7 @@ public class PlannerService {
         this.aggregationService = aggregationService;
         this.ruleEngine = ruleEngine;
         this.rulePackageService = rulePackageService;
+        this.lineageService = lineageService;
         this.om = om;
     }
 
@@ -214,6 +217,7 @@ public class PlannerService {
         migrated.setStateSchema(StateSchema.PUMP_REACH_ROAD_V2);
         migrated.setStatus(CheckpointStatus.COMPLETE);
         checkpointRepo.save(migrated);
+        lineageService.ensureLineage(stream, migrated);
 
         plan.setResultJson(writeJson(Map.of(
                 "adapted", true,
@@ -293,6 +297,7 @@ public class PlannerService {
         migrated.setStateSchema(StateSchema.PUMP_REACH_ROAD_V2);
         migrated.setStatus(CheckpointStatus.COMPLETE);
         checkpointRepo.save(migrated);
+        lineageService.ensureLineage(stream, migrated);
 
         // 新规则候选输出（证据账）
         RulePackage targetPkg = rulePackageService.get(stream.getId(), stream.getTargetRulePackageVersion());

@@ -2,6 +2,7 @@ package com.flood.statemigrate.config;
 
 import com.flood.statemigrate.domain.*;
 import com.flood.statemigrate.repo.*;
+import com.flood.statemigrate.service.LineageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,17 +31,24 @@ public class DataSeeder implements ApplicationRunner {
     private final CheckpointManifestRepo checkpointRepo;
     private final StreamEventRepo eventRepo;
     private final EvidenceEntryRepo evidenceRepo;
+    private final RetentionPolicyRepo retentionPolicyRepo;
+    private final BypassRuleRepo bypassRuleRepo;
+    private final LineageService lineageService;
     private final boolean seedEnabled;
 
     public DataSeeder(StreamDefinitionRepo streamRepo, RulePackageRepo rulePackageRepo,
                       CheckpointManifestRepo checkpointRepo, StreamEventRepo eventRepo,
-                      EvidenceEntryRepo evidenceRepo,
+                      EvidenceEntryRepo evidenceRepo, RetentionPolicyRepo retentionPolicyRepo,
+                      BypassRuleRepo bypassRuleRepo, LineageService lineageService,
                       @Value("${app.seed-demo-data:true}") boolean seedEnabled) {
         this.streamRepo = streamRepo;
         this.rulePackageRepo = rulePackageRepo;
         this.checkpointRepo = checkpointRepo;
         this.eventRepo = eventRepo;
         this.evidenceRepo = evidenceRepo;
+        this.retentionPolicyRepo = retentionPolicyRepo;
+        this.bypassRuleRepo = bypassRuleRepo;
+        this.lineageService = lineageService;
         this.seedEnabled = seedEnabled;
     }
 
@@ -176,6 +184,24 @@ public class DataSeeder implements ApplicationRunner {
         oldOutput(sid, 0, "R-001", RiskLevel.MEDIUM, 45.5, 30, "snap:chk-" + cp0.getId());
         oldOutput(sid, 1, "R-002", RiskLevel.MEDIUM, 37.7, 32, "snap:chk-" + cp1.getId());
         oldOutput(sid, 3, "R-004", RiskLevel.LOW, 11.96, 28, "snap:chk-" + cp3.getId());
+
+        // 检查点保留策略（按预警等级；规则变更与高影响输出延长保留期）
+        retentionPolicy(sid, WarningLevel.YELLOW, 30, 1, 15, 15);
+        retentionPolicy(sid, WarningLevel.ORANGE, 90, 2, 30, 30);
+        retentionPolicy(sid, WarningLevel.RED, 180, 3, 30, 45);
+
+        // 临时绕过规则：汛期 p2 传感器可信度下限临时豁免（谱系索引据此记录快照时刻生效规则）
+        BypassRule bypass = new BypassRule();
+        bypass.setStreamId(sid);
+        bypass.setRuleKey("CREDIBILITY_FLOOR");
+        bypass.setPartitionNo(2);
+        bypass.setEffectiveFrom(now.minus(6, ChronoUnit.HOURS));
+        bypass.setReason("暴雨期 p2 传感器校准，临时豁免可信度下限");
+        bypass.setStatus(BypassRuleStatus.ACTIVE);
+        bypassRuleRepo.save(bypass);
+
+        // 为演示检查点建立谱系索引（p2 无快照 → 谱系不完整，不可压缩）
+        lineageService.rebuild(sid);
         log.info("演示数据就绪: streamId={}", sid);
     }
 
@@ -206,6 +232,18 @@ public class DataSeeder implements ApplicationRunner {
         cp.setStateSchema(StateSchema.GRID_WINDOW_V1);
         cp.setStatus(status);
         return checkpointRepo.save(cp);
+    }
+
+    private void retentionPolicy(Long sid, WarningLevel level, int days, int drills,
+                                 int ruleChangeExtra, int highImpactExtra) {
+        RetentionPolicy policy = new RetentionPolicy();
+        policy.setStreamId(sid);
+        policy.setWarningLevel(level);
+        policy.setRetentionDays(days);
+        policy.setRequiredDrills(drills);
+        policy.setRuleChangeExtraDays(ruleChangeExtra);
+        policy.setHighImpactExtraDays(highImpactExtra);
+        retentionPolicyRepo.save(policy);
     }
 
     private void oldOutput(Long sid, int p, String roadId, RiskLevel level, double score,
